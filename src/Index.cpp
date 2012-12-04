@@ -267,8 +267,10 @@ ContainerEntry::mergable( const ContainerEntry& other )
 ostream& operator <<(ostream& os,const ContainerEntry& entry)
 {
     double begin_timestamp = 0, end_timestamp = 0;
+    int chksm = 0; // added checksum field for display jacob
     begin_timestamp = entry.begin_timestamp;
     end_timestamp  = entry.end_timestamp;
+    chksm			= entry.buff_checksum; //assigning container checksum jacob
     os  << setw(5)
         << entry.id             << " w "
         << setw(16)
@@ -280,7 +282,10 @@ ostream& operator <<(ostream& os,const ContainerEntry& entry)
         << end_timestamp   << " "
         << setw(16)
         << entry.logical_tail() << " "
-        << " [" << entry.id << "." << setw(10) << entry.physical_offset << "]";
+        << " [" << entry.id << "." << setw(10) << entry.physical_offset << "]"
+        << setw(16)
+        <<entry.buff_checksum
+        ; //added new field checksum for display jacob
     return os;
 }
 
@@ -295,8 +300,8 @@ ostream& operator <<(ostream& os,const Index& ndx )
     }
     map<off_t,ContainerEntry>::const_iterator itr;
     os << "# Entry Count: " << ndx.global_index.size() << endl;
-    os << "# ID Logical_offset Length Begin_timestamp End_timestamp "
-       << " Logical_tail ID.Chunk_offset " << endl;
+    os << "#  ID  Logical_offset  Length  Begin_timestamp  End_timestamp "
+       << " Logical_tail  ID.Chunk_offset  Checksum" << endl; //added new field checksum for plfs_map jacob
     for(itr = ndx.global_index.begin(); itr != ndx.global_index.end(); itr++) {
         os << itr->second << endl;
     }
@@ -656,6 +661,7 @@ int Index::readIndex( string hostindex, struct plfs_backend *hback )
         c_entry.physical_offset   = h_entry.physical_offset;
         c_entry.begin_timestamp   = h_entry.begin_timestamp;
         c_entry.end_timestamp     = h_entry.end_timestamp;
+        c_entry.buff_checksum     = h_entry.buff_checksum; //added HostEntry checksum to Container entry jacob 
         int ret = insertGlobal( &c_entry );
         if ( ret != 0 ) {
             /* caller should prob discard index if we fail here */
@@ -1188,6 +1194,31 @@ Index::chunkFound( IOSHandle **xfh, off_t *chunk_off, size_t *chunk_len,
     return 0;
 }
 
+//overloadded chunkfound for read checksum jacob
+int
+Index::chunkFound( IOSHandle **xfh, off_t *chunk_off, size_t *chunk_len,
+                   off_t shift, string& path,
+                   struct plfs_backend **backp, pid_t *chunkid,
+                   int *chunkbuffchk, ContainerEntry *entry )
+{
+    ChunkFile *cf_ptr = &(chunk_map[entry->id]); // typing shortcut
+    *chunk_off  = entry->physical_offset + shift;
+    *chunk_len  = entry->length       - shift;
+    *chunkid   = entry->id;
+    *chunkbuffchk  = entry->buff_checksum;
+    if( cf_ptr->fh == NULL ) {
+    	//maybe open the file and get a checksum...
+        mlog(IDX_DRARE, "Not opening chunkfile %s yet", cf_ptr->bpath.c_str());
+    }
+    mlog(IDX_DCOMMON, "Will read from chunk %s at off %ld (shift %ld)",
+         cf_ptr->bpath.c_str(), (long)*chunk_off, (long)shift );
+    *xfh = cf_ptr->fh;
+    path = cf_ptr->bpath;
+    *backp = cf_ptr->backend;
+    mlog(IDX_DCOMMON,"Going out of cFound, chunk buffer checksum is %i",*chunkbuffchk);
+    return 0;
+}
+
 // returns the fd for the chunk and the offset within the chunk
 // and the size of the chunk beyond the offset
 // if the chunk does not currently have an fd, it is created here
@@ -1196,7 +1227,7 @@ Index::chunkFound( IOSHandle **xfh, off_t *chunk_off, size_t *chunk_len,
 // returns 0 or -err
 int Index::globalLookup( IOSHandle **xfh, off_t *chunk_off, size_t *chunk_len,
                          string& path, struct plfs_backend **backp,
-                         bool *hole, pid_t *chunkid,
+                         bool *hole, pid_t *chunkid, int *chunkbuffchk, //added new parameter for read checksum jacob
                          off_t logical )
 {
     mss::mlog_oss os(IDX_DAPI);
@@ -1204,6 +1235,7 @@ int Index::globalLookup( IOSHandle **xfh, off_t *chunk_off, size_t *chunk_len,
     mlog(IDX_DAPI, "%s", os.str().c_str() );
     *hole = false;
     *chunkid = (pid_t)-1;
+    *chunkbuffchk = (int)-1; //initialize new checksum variable jacob
     //mlog(IDX_DCOMMON, "Look up %ld in %s",
     //        (long)logical, physical_path.c_str() );
     ContainerEntry entry, previous;
@@ -1244,7 +1276,7 @@ int Index::globalLookup( IOSHandle **xfh, off_t *chunk_off, size_t *chunk_len,
         //mlog(IDX_DCOMMON, "%s", oss.str().c_str() );
         return chunkFound( xfh, chunk_off, chunk_len,
                            logical - entry.logical_offset, path,
-                           backp, chunkid, &entry );
+                           backp, chunkid, chunkbuffchk, &entry );//added new parameter for read checksum jacob
     }
     // case 1 or 2
     if ( prev != (MAP_ITR)NULL ) {
@@ -1295,7 +1327,7 @@ Index::memoryFootprintMBs()
 
 void
 Index::addWrite( off_t offset, size_t length, pid_t pid,
-                 double begin_timestamp, double end_timestamp )
+                 double begin_timestamp, double end_timestamp, int wbuff_checksum )//added a checksum parameter jacob
 {
     Metadata::addWrite( offset, length );
     // check whether incoming abuts with last and we want to compress
@@ -1308,6 +1340,7 @@ Index::addWrite( off_t offset, size_t length, pid_t pid,
              (long)hostIndex.back().logical_offset,
              (int)hostIndex.back().length );
         hostIndex.back().end_timestamp = end_timestamp;
+        hostIndex.back().buff_checksum = wbuff_checksum; //added checksum to hostindex jacob
         hostIndex.back().length += length;
         physical_offsets[pid] += length;
     } else {
@@ -1321,6 +1354,7 @@ Index::addWrite( off_t offset, size_t length, pid_t pid,
         // valgrind complains about this line as well:
         // Address 0x97373bc is 20 bytes inside a block of size 40 alloc'd
         entry.end_timestamp   = end_timestamp;
+        entry.buff_checksum = wbuff_checksum;  //added checksum to hostindex jacob 
         // lookup the physical offset
         map<pid_t,off_t>::iterator itr = physical_offsets.find(pid);
         if ( itr == physical_offsets.end() ) {
@@ -1354,6 +1388,7 @@ Index::addWrite( off_t offset, size_t length, pid_t pid,
         c_entry.physical_offset   = poff;
         c_entry.begin_timestamp   = begin_timestamp;
         c_entry.end_timestamp     = end_timestamp;
+        c_entry.buff_checksum     = wbuff_checksum; //added checksum entry to container entry jacob
         insertGlobal(&c_entry);  // push it into the read index structure
         // Make sure we have the chunk path
         // chunk map only used for read index.  We need to maintain it here
@@ -1469,10 +1504,12 @@ Index::rewriteIndex( IOSHandle *rfh )
     for( itrd = global_index_timesort.begin(); itrd !=
             global_index_timesort.end(); itrd++ ) {
         double begin_timestamp = 0, end_timestamp = 0;
+        int rwbuff_checksum = 0; //added checksum variable jacob
         begin_timestamp = itrd->second.begin_timestamp;
         end_timestamp   = itrd->second.end_timestamp;
+        rwbuff_checksum   = itrd->second.buff_checksum; // copied value from container entry jacob
         addWrite( itrd->second.logical_offset,itrd->second.length,
-                  itrd->second.original_chunk, begin_timestamp, end_timestamp );
+                  itrd->second.original_chunk, begin_timestamp, end_timestamp, rwbuff_checksum); //added checksum parameter to rewrite jacob
         /*
         ostringstream os;
         os << __FUNCTION__ << " added : " << itr->second;

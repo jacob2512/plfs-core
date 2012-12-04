@@ -272,12 +272,13 @@ WriteFile::removeWriter( pid_t pid )
 int
 WriteFile::extend( off_t offset )
 {
+	int dummy_chksm = 0; //added dummy checksum variable jacob
     // make a fake write
     if ( fhs.begin() == fhs.end() ) {
         return -ENOENT;
     }
     pid_t p = fhs.begin()->first;
-    index->addWrite( offset, 0, p, createtime, createtime );
+    index->addWrite( offset, 0, p, createtime, createtime, dummy_chksm );//added dummy checksum parameter jacob );
     addWrite( offset, 0 );   // maintain metadata
     return 0;
 }
@@ -294,6 +295,7 @@ WriteFile::write(const char *buf, size_t size, off_t offset, pid_t pid)
 {
     int ret = 0;
     ssize_t written;
+    int chksm = Container::hashValue(buf);//taking checksum of the buffer jacob
     OpenFh *ofh = getFh( pid );
     if ( ofh == NULL ) {
         // we used to return -ENOENT here but we can get here legitimately
@@ -318,7 +320,7 @@ WriteFile::write(const char *buf, size_t size, off_t offset, pid_t pid)
         if ( ret >= 0 ) {
             write_count++;
             Util::MutexLock(   &index_mux , __FUNCTION__);
-            index->addWrite( offset, ret, pid, begin, end );
+            index->addWrite( offset, ret, pid, begin, end, chksm ); //added checksum as a new argument jacob
             // TODO: why is 1024 a magic number?
             int flush_count = 1024;
             if (write_count%flush_count==0) {

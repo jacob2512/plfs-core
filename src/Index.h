@@ -59,6 +59,7 @@ class HostEntry
         size_t length;
         double begin_timestamp;
         double end_timestamp;
+        int buff_checksum;// modified HostEntry to add a checksum field jacob
         pid_t  id;      // needs to be last so no padding
 
         friend class Index;
@@ -113,7 +114,7 @@ class Index : public Metadata
 
         bool ispopulated( );
 
-        void addWrite( off_t offset, size_t bytes, pid_t, double, double );
+        void addWrite( off_t offset, size_t bytes, pid_t, double, double, int ); //added checksum parameter jacob
 
         size_t memoryFootprintMBs();    // how much area the index is occupying
 
@@ -149,7 +150,7 @@ class Index : public Metadata
 
         int globalLookup( IOSHandle **fh, off_t *chunk_off, size_t *length,
                           string& path, struct plfs_backend **backp,
-                          bool *hole, pid_t *chunk_id,
+                          bool *hole, pid_t *chunk_id, int *chunkbuffchk, //added new parameter to get container checksum jacob
                           off_t logical );
 
         int insertGlobal( ContainerEntry * );
@@ -175,6 +176,9 @@ class Index : public Metadata
         int chunkFound( IOSHandle **, off_t *, size_t *, off_t,
                         string&, struct plfs_backend **,
                         pid_t *, ContainerEntry * );
+        int chunkFound( IOSHandle **, off_t *, size_t *, off_t,
+                                string&, struct plfs_backend **,
+                                pid_t *, int* , ContainerEntry * ); //overloaded chunkfound to included checksum jacob
         int cleanupReadIndex(IOSHandle *, void *, off_t, int, const char *,
                              const char *, struct plfs_backend *);
         int mapIndex( void **, string, IOSHandle **, off_t *,

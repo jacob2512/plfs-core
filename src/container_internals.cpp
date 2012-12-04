@@ -45,6 +45,7 @@ typedef struct {
     off_t logical_offset;
     char *buf;
     pid_t chunk_id; // in order to stash fd's back into the index
+    int lchksm; //added checksum field to use in read jacob
     string path;
     struct plfs_backend *backend;
     bool hole;
@@ -714,6 +715,7 @@ find_read_tasks(Index *index, list<ReadTask> *tasks, size_t size, off_t offset,
                                   &task.backend,
                                   &(task.hole),
                                   &(task.chunk_id),
+                                  &(task.lchksm),//added checksum field to get current checksum jacob
                                   offset+bytes_traversed);
         // make sure it's good
         if ( ret == 0 ) {
@@ -729,7 +731,7 @@ find_read_tasks(Index *index, list<ReadTask> *tasks, size_t size, off_t offset,
             oss << chunk << ".1) Found index entry offset "
                 << task.chunk_offset << " len "
                 << task.length << " fh " << task.fh << " path "
-                << task.path << endl;
+                << task.path << " chk "<< task.lchksm << endl; //got the logical checksum here jacob
             // check to see if we can combine small sequential reads
             // when merging is off, that breaks things even more.... ?
             // there seems to be a merging bug now too
@@ -765,6 +767,7 @@ int
 perform_read_task( ReadTask *task, Index *index )
 {
     int ret;
+    size_t pcheck = -1; //to get the checksum from physical location jacob
     if ( task->hole ) {
         memset((void *)task->buf, 0, task->length);
         ret = task->length;
