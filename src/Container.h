@@ -163,6 +163,7 @@ class Container
                                      Index * );
         static int freeIndex( Index ** );
         static size_t hashValue( const char *str );
+        static size_t hashValue( const char *str, size_t length );//hashValue overload for checksum jacob 
         static blkcnt_t bytesToBlocks( size_t total_bytes );
         static int nextdropping( const string&, struct plfs_backend *,
                                  string *, struct plfs_backend **, const char *,

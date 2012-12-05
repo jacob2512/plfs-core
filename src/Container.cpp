@@ -194,6 +194,22 @@ Container::hashValue( const char *str )
     */
 }
 
+size_t
+Container::hashValue( const char *str, size_t length )//hashValue overload for checksum jacob 
+{
+    mlog(CON_DINTAPI,"length is %u",length);
+	//str=str-length;
+    size_t sum = 0, i;
+    for(i = 0; i<length; i++)
+    {
+    	mlog(CON_DINTAPI,"current str[%u] is %u",i,(size_t)str[i]);
+        sum += (size_t)(str[i]);
+        mlog(CON_DINTAPI,"current sum is %u",sum);
+    }
+    mlog(CON_DINTAPI, "%s: %s -> %u",__FUNCTION__,str,(unsigned int)sum);
+    return sum;
+}
+
 // our simple rule currently is a directory with an access file in it
 // and not the S_ISUID bit.  The problem with the S_ISUID bit was that it
 // makes makeTopLevel much more complicated and S_ISUID isn't available

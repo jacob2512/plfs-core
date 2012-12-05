@@ -1287,7 +1287,7 @@ int Index::globalLookup( IOSHandle **xfh, off_t *chunk_off, size_t *chunk_len,
             //mlog(IDX_DCOMMON, "%s", oss.str().c_str() );
             return chunkFound( xfh, chunk_off, chunk_len,
                                logical - previous.logical_offset, path,
-                               backp, chunkid, &previous );
+                               backp, chunkid, chunkbuffchk, &previous );//added new parameter for read checksum jacob
         }
     }
     // now it's either before entry and in a hole or after entry and off

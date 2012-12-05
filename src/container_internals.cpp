@@ -815,6 +815,14 @@ perform_read_task( ReadTask *task, Index *index )
         }
         /* here's where we actually read container data! */
         ret = task->fh->Pread(task->buf, task->length, task->chunk_offset );
+        pcheck = Container::hashValue(task->buf,task->length);
+        mlog(PLFS_DAPI, "pcheck is now %u",pcheck);
+         if(pcheck == task->lchksm)
+         {mlog(PLFS_DAPI, "Checksums match, proceed with activity...");
+         }
+         else
+         {mlog(PLFS_DAPI, "Checksums don't match %u != %i, throw error...",pcheck,task->lchksm);
+         }
     }
     mss::mlog_oss oss(INT_DCOMMON);
     oss << "\t READ TASK: offset " << task->chunk_offset << " len "
